@@ -5911,8 +5911,8 @@ function sendSocketMessage($msg, $callbackJSFunction = "", $users_id = "-1", $se
             $msg = json_encode($msg);
         }
         $obj = YPTSocket::send($msg, $callbackJSFunction, $users_id, $send_to_uri_pattern);
-        if ($obj->error) {
-            _error_log("sendSocketMessage " . $obj->msg, AVideoLog::$ERROR);
+        if ($obj->error && !empty($obj->msg)) {
+            _error_log("sendSocketMessage " . $obj->msg);
         }
         return $obj;
     }
@@ -6498,7 +6498,7 @@ function getCDN($type = 'CDN', $id = 0) {
     }
     
     //var_dump($type, $id, $_getCDNURL[$index]);
-    return $_getCDNURL[$index];
+    return empty($_getCDNURL[$index])?false:$_getCDNURL[$index];
 }
 
 function getCDNOrURL($url, $type = 'CDN', $id = 0) {

@@ -1,5 +1,4 @@
 <?php
-
 require_once $global['systemRootPath'] . 'objects/functions.php';
 
 // filter some security here
@@ -8,8 +7,6 @@ $securityFilterInt = array('isAdmin', 'priority', 'totalClips', 'rowCount');
 $securityRemoveSingleQuotes = array('search', 'searchPhrase', 'videoName', 'databaseName', 'sort', 'user', 'pass', 'encodedPass', 'isAdmin', 'videoLink', 'video_password');
 $securityRemoveNonChars = array('resolution', 'format', 'videoDirectory');
 $filterURL = array('videoURL', 'siteURL', 'redirectUri', 'encoderURL');
-
-
 
 if (!empty($_FILES)) {
     foreach ($_FILES as $key => $value) {
@@ -20,17 +17,17 @@ if (!empty($_FILES)) {
 $scanVars = array('GET', 'POST', 'REQUEST');
 
 foreach ($scanVars as $value) {
-    eval('$scanThis = &$_' . $value.';');
+    $scanThis = &$$value;
     if (!empty($scanThis['base64Url'])) {
         if (!filter_var(base64_decode($scanThis['base64Url']), FILTER_VALIDATE_URL)) {
             _error_log('base64Url attack ' . json_encode($_SERVER), AVideoLog::$SECURITY);
             exit;
         }
     }
-    if(!empty($scanThis['videos_id'])){
+    if (!empty($scanThis['videos_id'])) {
         $scanThis['videos_id'] = videosHashToID($scanThis['videos_id']);
     }
-    if(!empty($scanThis['v'])){
+    if (!empty($scanThis['v'])) {
         $scanThis['v'] = videosHashToID($scanThis['v']);
     }
 
@@ -45,7 +42,6 @@ foreach ($scanVars as $value) {
         }
     }
 
-
     foreach ($securityRemoveNonChars as $value) {
         if (!empty($scanThis[$value])) {
             if (is_string($scanThis[$value])) {
@@ -59,7 +55,6 @@ foreach ($scanVars as $value) {
             }
         }
     }
-
 
     foreach ($securityRemoveSingleQuotes as $value) {
         if (!empty($scanThis[$value])) {
@@ -77,8 +72,30 @@ foreach ($scanVars as $value) {
 
     // all variables with _id at the end will be forced to be interger
     foreach ($scanThis as $key => $value) {
-        if(preg_match('/_id$/i', $key)){
-            $scanThis[$key] = intval($value);
+        if (preg_match('/_id$/i', $key)) {
+            if(empty($value)){
+                $scanThis[$key] = 0;
+            }else 
+            if (is_numeric($value)) {
+                $scanThis[$key] = intval($value);
+            } else {
+                if(is_string($value)){
+                    $json = json_decode($value);
+                    if(empty($json)){
+                        $json = json_decode("[$value]");
+                    }
+                }else{
+                    $json = $value;
+                }
+                if (is_array($json)) {
+                    foreach ($json as $key => $value) {
+                        $json[$key] = intval($value);
+                    }
+                    $scanThis[$key] = json_encode($json);
+                } else {
+                    $scanThis[$key] = intval($value);
+                }
+            }
         }
     }
 

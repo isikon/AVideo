@@ -2160,15 +2160,7 @@ if (typeof gtag !== \"function\") {
     }
 
     public static function loginFromRequest() {
-        $inputJSON = url_get_contents('php://input');
-        $input = _json_decode($inputJSON, true); //convert JSON into array
-        if (is_array($input)) {
-            foreach ($input as $key => $value) {
-                if (empty($_REQUEST[$key])) {
-                    $_REQUEST[$key] = $value;
-                }
-            }
-        }
+        inputToRequest();
         if (!empty($_REQUEST['do_not_login'])) {
             return false;
         }
@@ -2365,6 +2357,31 @@ if (typeof gtag !== \"function\") {
                 . " modified = now() WHERE id = ?";
 
         return sqlDAL::writeSql($sql, "si", array($string, $users_id));
+    }
+    
+    static function userGroupsMatch($user_groups, $users_id=0){        
+        if(empty($users_id)){
+            $users_id = User::getId();
+        } 
+        if(empty($user_groups)){
+            return true;
+        }
+        if(empty($users_id)){
+            return false;
+        }
+        if(!is_array($user_groups)){
+            $user_groups = array($user_groups);
+        }        
+        $user_users_groups = UserGroups::getUserGroups($users_id);
+        if(empty($user_users_groups)){
+            return false;
+        }
+        foreach ($user_users_groups as $value) {
+            if(in_array($value['id'], $user_groups)){
+                return true;
+            }
+        }
+        return false;
     }
 
 }

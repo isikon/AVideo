@@ -2462,6 +2462,20 @@ function isAVideoEncoder($user_agent = "") {
     return false;
 }
 
+function isCDN(){
+    if(empty($_SERVER['HTTP_CDN_HOST'])){
+        return false;
+    }
+    return isFromCDN($_SERVER['HTTP_CDN_HOST']);
+}
+
+function isFromCDN($url) {
+    if(preg_match('/cdn.ypt.me/i', $url)){
+        return true;
+    }
+    return false;
+}
+
 function isAVideo($user_agent = "") {
     if (empty($user_agent)) {
         $user_agent = @$_SERVER['HTTP_USER_AGENT'];
@@ -2506,7 +2520,7 @@ function requestComesFromSameDomainAsMyAVideo() {
         $url = $_SERVER['HTTP_ORIGIN'];
     }
     //_error_log("requestComesFromSameDomainAsMyAVideo: ({$url}) == ({$global['webSiteRootURL']})");
-    return isSameDomain($url, $global['webSiteRootURL']) || isSameDomain($url, getCDN());
+    return isSameDomain($url, $global['webSiteRootURL']) || isSameDomain($url, getCDN()) || isFromCDN($url);
 }
 
 function requestComesFromSafePlace() {
@@ -3993,7 +4007,10 @@ function isFirstPage() {
 }
 
 function isVideo() {
-    global $isModeYouTube;
+    global $isModeYouTube, $global;
+    if (!empty($global['doNotLoadPlayer'])) {
+        return false;
+    }
     return !empty($isModeYouTube) || isPlayList() || isEmbed() || isLive();
 }
 
@@ -4046,12 +4063,18 @@ function isChannel() {
 }
 
 function isEmbed() {
-    global $isEmbed;
+    global $isEmbed, $global;
+    if (!empty($global['doNotLoadPlayer'])) {
+        return false;
+    }
     return !empty($isEmbed);
 }
 
 function isLive() {
-    global $isLive;
+    global $isLive, $global;
+    if (!empty($global['doNotLoadPlayer'])) {
+        return false;
+    }
     if (!empty($isLive)) {
         $live = getLiveKey();
         if (empty($live)) {
@@ -4125,6 +4148,20 @@ function getRedirectUri() {
         return $_SERVER["HTTP_REFERER"];
     }
     return getRequestURI();
+}
+
+function getRedirectToVideo($videos_id) {
+    $redirectUri = getRedirectUri();
+    $isEmbed = 0;
+    if (stripos($redirectUri, "embed") !== false) {
+        $isEmbed = 1;
+    }
+    $video = Video::getVideoLight($videos_id);
+    if(empty($video)){
+        return false;
+    }
+    return Video::getLink($videos_id, $video['clean_title'], $isEmbed);
+    
 }
 
 function getRequestURI() {
@@ -4948,7 +4985,13 @@ function _json_decode($object) {
     if (!is_string($object)) {
         return $object;
     }
-    return json_decode($object);
+    $json = json_decode($object);
+    if($json===NULL){
+        $object = str_replace(array("\r", "\n"), array('\r', '\n'), $object);
+        return json_decode($object);
+    }else{
+        return $json;
+    }
 }
 
 // this will make sure the strring will fits in the database field
@@ -5683,7 +5726,7 @@ function getSocialModal($videos_id, $url = "", $title = "") {
             <div class="modal-content">
                 <div class="modal-body">
                     <center>
-    <?php include $global['systemRootPath'] . 'view/include/social.php'; ?>
+                        <?php include $global['systemRootPath'] . 'view/include/social.php'; ?>
                     </center>
                 </div>
             </div>
@@ -6126,13 +6169,16 @@ function getStatsNotifications($force_recreate = false) {
 
 function getSocketConnectionLabel() {
     $html = '<span class="socketStatus">
-            <span class="socket_disconnected">
+            <span class="socket_icon socket_loading_icon">
+                <i class="fas fa-sync fa-spin"></i>
+            </span>
+            <span class="socket_icon socket_not_loading socket_disconnected_icon">
                 <span class="fa-stack">
   <i class="fas fa-slash fa-stack-1x"></i>
   <i class="fas fa-plug fa-stack-1x"></i>
 </span> ' . __('Disconnected') . '
             </span>
-            <span class="socket_connected">
+            <span class="socket_icon socket_not_loading socket_connected_icon">
                 <span class="fa-stack">
   <i class="fas fa-plug fa-stack-1x"></i>
 </span>  ' . __('Connected') . '
@@ -6461,6 +6507,9 @@ function hashToID($hash) {
 }
 
 function videosHashToID($hash_of_videos_id) {
+    if(!is_string($hash_of_videos_id) && !is_numeric($hash_of_videos_id)){
+        return 0;
+    }
     if (preg_match('/^\.([0-9a-z._-]+)/i', $hash_of_videos_id, $matches)) {
         $hash_of_videos_id = hashToID($matches[1]);
     }
@@ -6487,18 +6536,18 @@ function getCDN($type = 'CDN', $id = 0) {
             $_getCDNURL[$index] = CDN::getURL($type, $id);
         }
     }
-    if($type=='CDN'){
+    if ($type == 'CDN') {
         if (!empty($global['ignoreCDN'])) {
             return $global['webSiteRootURL'];
         } else if (isValidURL($advancedCustom->videosCDN)) {
             $_getCDNURL[$index] = addLastSlash($advancedCustom->videosCDN);
-        }else if(empty($_getCDNURL[$index])){
+        } else if (empty($_getCDNURL[$index])) {
             $_getCDNURL[$index] = $global['webSiteRootURL'];
         }
     }
-    
+
     //var_dump($type, $id, $_getCDNURL[$index]);
-    return empty($_getCDNURL[$index])?false:$_getCDNURL[$index];
+    return empty($_getCDNURL[$index]) ? false : $_getCDNURL[$index];
 }
 
 function getCDNOrURL($url, $type = 'CDN', $id = 0) {
@@ -6509,16 +6558,37 @@ function getCDNOrURL($url, $type = 'CDN', $id = 0) {
     return addLastSlash($url);
 }
 
-function isIPPrivate($ip) {    
-    if(!filter_var($ip, FILTER_VALIDATE_IP)){
+function isIPPrivate($ip) {
+    if (!filter_var($ip, FILTER_VALIDATE_IP)) {
         return false;
     }
     $result = filter_var(
             $ip,
             FILTER_VALIDATE_IP,
             FILTER_FLAG_IPV4 | FILTER_FLAG_NO_PRIV_RANGE | FILTER_FLAG_NO_RES_RANGE);
-    if(empty($result)){
+    if (empty($result)) {
         return true;
     }
     return false;
+}
+
+function countDownPage($toTime, $message, $image, $bgImage) {
+    global $global;
+    include $global['systemRootPath'] . 'objects/functionCountDownPage.php';
+    exit;
+}
+
+function inputToRequest(){
+    $content = file_get_contents("php://input");
+    if(!empty($content)){
+        $json = json_decode($content);
+        if(empty($json)){
+            return false;
+        }
+        foreach ($json as $key => $value) {
+            if(!isset($_REQUEST[$key])){
+                $_REQUEST[$key] = $value;
+            }
+        }
+    }
 }
